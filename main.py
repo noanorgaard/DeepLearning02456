@@ -38,35 +38,6 @@ class Hyperparameters:
 # Build NRMS model
 #model = NRMS(hparams, word2vec_embedding)
 
-his_input_title = data.history["article_id_fixed"].to_numpy()
-title_in_impression = data.behaviors[["user_id","article_ids_inview", "article_ids_clicked"]]
-title_in_impression_grouped_user_id = title_in_impression.set_index("user_id")
-
-# Remove duplicates in index by making new list of article_ids_inview and article_ids_clicked
-
-prev_index = []
-for index, row in title_in_impression_grouped_user_id.iterrows():
-    if index in prev_index:
-        first_row = title_in_impression_grouped_user_id.loc[index].iloc[0]
-        first_row["article_ids_inview"] = list(set(np.append(first_row["article_ids_inview"],row["article_ids_inview"])))
-        first_row["article_ids_clicked"] = list(set(np.append(first_row["article_ids_clicked"],row["article_ids_clicked"])))
-        # Update the row in the original dataframe
-        title_in_impression_grouped_user_id.loc[index] = first_row
-        te = 1
-    else:
-        prev_index.append(index)
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Group by user_id
 user_his = clicked_title_in_impression.groupby("user_id").apply(lambda x: x["article_ids_clicked"].to_numpy())
