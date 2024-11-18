@@ -1,10 +1,13 @@
 import dataloader
 from nrms import NRMS
+import pandas as pd
+import polars as pl
 from train import train, HParams
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from  train import generate_dummy_data
+import numpy as np
 
 
 # Load the data
@@ -24,27 +27,29 @@ class Hyperparameters:
         self.attention_hidden_dim = 200
         self.dropout = 0.2
         self.learning_rate = 0.001
-        self.negative_samopling_ratio = 4
+        self.negative_sampling_ratio = 4
 
 # Usage
-hparams = Hyperparameters(data)
+#hparams = Hyperparameters(data)
 
 # Initialize NRMS model
-word2vec_embedding = data.article_embeddings["contrastive_vector"].to_numpy()
+#word2vec_embedding = data.article_embeddings["contrastive_vector"].to_numpy()
 
 # Build NRMS model
-model = NRMS(hparams, word2vec_embedding)
+#model = NRMS(hparams, word2vec_embedding)
 
-his_input_title = data.history["article_id_fixed"].to_numpy()
-clicked_title_in_impression = data.behaviors["article_ids_clicked"].to_numpy()
-in_view_title_in_impression = data.behaviors["article_ids_inview"].to_numpy()
+
+# Group by user_id
+user_his = clicked_title_in_impression.groupby("user_id").apply(lambda x: x["article_ids_clicked"].to_numpy())
+
+
 labels = data.behaviors["label"].to_numpy()
 
 
 
 
 # Train the model
-train(nrms_model, dataloader, criterion, optimizer, num_epochs=10, hparams=hparams)
+#train(nrms_model, dataloader, criterion, optimizer, num_epochs=10, hparams=hparams)
 
 
 # Print model summary (optional)
