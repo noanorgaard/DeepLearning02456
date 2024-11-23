@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from  train import generate_dummy_data
 import numpy as np
+from nrms import NewsEncoder
 
 
 # Load the data
@@ -20,9 +21,9 @@ data = dataloader.Data(f"{path_to_data}/train/behaviors.parquet", f"{path_to_dat
 # Define hyperparameters
 class Hyperparameters:
     def __init__(self, data):
-        self.history_size = 30
-        self.title_size = 100
-        self.head_num = 8
+        self.history_size = 20
+        self.title_size = 768
+        self.head_num = 16
         self.head_dim = 16
         self.attention_hidden_dim = 200
         self.dropout = 0.2
@@ -30,20 +31,32 @@ class Hyperparameters:
         self.negative_sampling_ratio = 4
 
 # Usage
-#hparams = Hyperparameters(data)
+hparams = Hyperparameters(data)
 
 # Initialize NRMS model
 #word2vec_embedding = data.article_embeddings["contrastive_vector"].to_numpy()
+
+# Make news encoder and test it
+news_encoder = NewsEncoder(hparams, units_per_layer=[512, 512, 512])
+print(news_encoder)
+article_ids = data.articles["article_id"].head(5)
+articles = []
+for article_id in article_ids:
+    articles.append(data.article_embeddings_dict[article_id])
+
+articles = np.array(articles)
+articles_tensor = torch.from_numpy(articles)
+# Make a forward pass
+encoded_article = news_encoder(articles_tensor)
+print(encoded_article)
+
 
 # Build NRMS model
 #model = NRMS(hparams, word2vec_embedding)
 
 
 # Group by user_id
-user_his = clicked_title_in_impression.groupby("user_id").apply(lambda x: x["article_ids_clicked"].to_numpy())
 
-
-labels = data.behaviors["label"].to_numpy()
 
 
 
@@ -53,7 +66,7 @@ labels = data.behaviors["label"].to_numpy()
 
 
 # Print model summary (optional)
-print(model)
+#print(model)
 
 
 

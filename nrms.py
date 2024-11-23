@@ -5,22 +5,28 @@ import torch.nn.functional as F
 
 
 class NewsEncoder(nn.Module):
-    def __init__(self, hparams, word2vec_embedding, seed=None):
+    def __init__(self, hparams, units_per_layer=[512, 512, 512]):
         super(NewsEncoder, self).__init__()
-        self.embedding_layer = nn.Embedding.from_pretrained(
-            torch.tensor(word2vec_embedding, dtype=torch.float32), freeze=False)
-        self.dropout = nn.Dropout(hparams.dropout)
-        self.self_attention = nn.MultiheadAttention(embed_dim=hparams.head_dim, num_heads=hparams.head_num)
-        self.att_layer = nn.Linear(hparams.head_dim, hparams.attention_hidden_dim)
-        self.tanh = nn.Tanh()
+        self.hparams = hparams
+        self.document_vector_dim = hparams.title_size
+        self.output_dim = hparams.head_num * hparams.head_dim
 
-    def forward(self, sequences_input_title):
-        embedded_sequences_title = self.embedding_layer(sequences_input_title)
-        y = self.dropout(embedded_sequences_title)
-        y, _ = self.self_attention(y, y, y)
-        y = self.dropout(y)
-        pred_title = self.tanh(self.att_layer(y))
-        return pred_title
+        layers = []
+        input_dim = self.document_vector_dim
+        for units in units_per_layer:
+            layers.append(nn.Linear(input_dim, units))
+            layers.append(nn.ReLU())
+            layers.append(nn.BatchNorm1d(units))
+            layers.append(nn.Dropout(hparams.dropout))
+            input_dim = units
+
+        layers.append(nn.Linear(input_dim, self.output_dim))
+        layers.append(nn.ReLU())
+
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
 
 
 class UserEncoder(nn.Module):

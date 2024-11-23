@@ -12,7 +12,7 @@ class Data:
         self.articles = pd.read_parquet(path_to_articles)
         self.history = pd.read_parquet(path_to_history)
         self.article_embeddings = pd.read_parquet(path_to_embeddings)
-        #self.article_embeddings_dict = {row["article_id"]: row["contrastive_vector"] for row in self.article_embeddings.to_dicts()}
+        self.article_embeddings_dict = {row["article_id"]: row["contrastive_vector"] for row in self.article_embeddings.to_dict(orient='records')}
 
         title_in_impression = self.behaviors[["user_id", "article_ids_inview", "article_ids_clicked"]]
         title_in_impression_grouped_user_id = title_in_impression.set_index("user_id")
