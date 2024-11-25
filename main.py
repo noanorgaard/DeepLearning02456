@@ -61,7 +61,10 @@ nrms_model = NRMS(hparams, news_encoder)
 batch_size = 2
 his_input_title = torch.randn(batch_size, hparams.history_size, hparams.title_size)
 pred_input_title = torch.randn(batch_size, hparams.negative_sampling_ratio + 1, hparams.title_size)
-labels = torch.randint(0, 2, (batch_size, hparams.negative_sampling_ratio + 1)).float()
+labels = torch.zeros(batch_size, hparams.negative_sampling_ratio + 1)
+for i in range(batch_size):
+    labels[i, torch.randint(0, hparams.negative_sampling_ratio + 1, (1,))] = 1
+labels = labels.float()
 
 # Make a forward pass
 preds = nrms_model(his_input_title, pred_input_title)
