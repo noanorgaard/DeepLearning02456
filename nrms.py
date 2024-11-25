@@ -11,8 +11,12 @@ class NewsEncoder(nn.Module):
         self.document_vector_dim = hparams.title_size
         self.output_dim = hparams.head_num * hparams.head_dim
 
+
+        self.multihead_layer = nn.MultiheadAttention(embed_dim=self.document_vector_dim, num_heads=hparams.head_num)
+
         layers = []
         input_dim = self.document_vector_dim
+
         for units in units_per_layer:
             layers.append(nn.Linear(input_dim, units))
             layers.append(nn.ReLU())
