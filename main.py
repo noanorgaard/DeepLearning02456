@@ -2,13 +2,13 @@ import dataloader
 from nrms import NRMS
 import pandas as pd
 import polars as pl
-from train import train, HParams
+from train import train
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from  train import generate_dummy_data
 import numpy as np
 from nrms import NewsEncoder
+import torch.optim as optim
 
 
 # Load the data
@@ -29,7 +29,9 @@ class Hyperparameters:
         self.dropout = 0.2
         self.learning_rate = 0.001
         self.negative_sampling_ratio = 4
-
+        self.newsencoder_output_dim = 256
+        self.dim_attention_later2 = 256
+        self.loss_func = nn.CrossEntropyLoss()
 # Usage
 hparams = Hyperparameters(data)
 
@@ -51,11 +53,32 @@ encoded_article = news_encoder(articles_tensor)
 print(encoded_article)
 
 
-# Build NRMS model
-#model = NRMS(hparams, word2vec_embedding)
+# Initialize NRMS model
+news_encoder = NewsEncoder(hparams, units_per_layer=[512, 512, 512])
+nrms_model = NRMS(hparams, news_encoder)
+
+# Prepare dummy input data
+batch_size = 2
+his_input_title = torch.randn(batch_size, hparams.history_size, hparams.title_size)
+pred_input_title = torch.randn(batch_size, hparams.negative_sampling_ratio + 1, hparams.title_size)
+labels = torch.randint(0, 2, (batch_size, hparams.negative_sampling_ratio + 1)).float()
+
+# Make a forward pass
+preds = nrms_model(his_input_title, pred_input_title)
+print(preds)
 
 
-# Group by user_id
+
+# Create DataLoader
+dataset = TensorDataset(his_input_title, pred_input_title, labels)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+# Define  optimizer
+optimizer = optim.Adam(nrms_model.parameters(), lr=hparams.learning_rate)
+
+
+# Train the model
+train(nrms_model, dataloader, hparams.loss_func, optimizer, num_epochs=10, hparams=hparams)
 
 
 
