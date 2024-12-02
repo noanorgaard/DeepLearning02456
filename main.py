@@ -1,4 +1,3 @@
-import dataloader
 from nrms import NRMS
 import pandas as pd
 import polars as pl
@@ -9,7 +8,8 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from nrms import NewsEncoder
 import torch.optim as optim
-from myDataloader import create_dataloader
+from dataloader import create_dataloader
+from pathlib import Path
 
 
 
@@ -36,7 +36,10 @@ hparams = Hyperparameters()
 path_to_data = "tmp/Data/ebnerd_small"
 path_to_embeddings = "tmp/Data/Ekstra_Bladet_contrastive_vector/Ekstra_Bladet_contrastive_vector"
 
-data = dataloader.Data(f"{path_to_data}/train/behaviors.parquet", f"{path_to_data}/articles.parquet", f"{path_to_data}/train/history.parquet", f"{path_to_embeddings}/contrastive_vector.parquet", hparams)
+dataloader_train = create_dataloader(Path(path_to_data), Path(path_to_embeddings),hparams, 32 )
+
+
+#data = dataloader2.Data(f"{path_to_data}/train/behaviors.parquet", f"{path_to_data}/articles.parquet", f"{path_to_data}/train/history.parquet", f"{path_to_embeddings}/contrastive_vector.parquet", hparams)
 
 
 # Initialize NRMS model
@@ -45,9 +48,6 @@ nrms_model = NRMS(hparams, news_encoder)
 
 # Define  optimizer
 optimizer = optim.Adam(nrms_model.parameters(), lr=hparams.learning_rate)
-
-
-dataloader_train = create_dataloader(data.df_train.head(hparams.num_of_rows_in_train), "his_article_ids", data.article_embeddings_dict, hparams.history_size, hparams.title_size, "zeros", eval_mode=False, batch_size=32)
 
 # Train the model
 train(nrms_model, dataloader_train, hparams.loss_func, optimizer, num_epochs=1, hparams=hparams)
