@@ -109,7 +109,10 @@ class NewsrecDataset(Dataset):
             self.behaviors
             .join(self.history, on="user_id", how="left") # joining the history and behaviors dataframes
             .head(self.hparams.num_of_rows_in_train)
-        )
+            .filter(
+                ~pl.col("his_article_ids").list.contains(0)
+                ) # filtering out the rows with 0 in the history
+            )
 
     def _split_to_Xy(self):
         ''' Split data frame into X and y '''
