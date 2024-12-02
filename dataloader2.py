@@ -61,6 +61,11 @@ class NewsrecDataset(Dataset):
         self.eval_mode = eval_mode
         self.unknown_index = [0]
 
+        # Create lookup objects
+        self.lookup_article_index, self.lookup_article_matrix = create_lookup_objects(
+            self.article_embeddings_dict, unknown_representation=self.unknown_representation
+        )
+
         self._prepare_history(COLUMNS_FROM_HISTORY)
         self._prepare_behaviors(COLUMNS_FROM_BEHAVIORS)
         self._join_dataframes()
@@ -103,14 +108,15 @@ class NewsrecDataset(Dataset):
         self.df_train = (
             self.behaviors
             .join(self.history, on="user_id", how="left") # joining the history and behaviors dataframes
+            .head(self.hparams.num_of_rows_in_train)
         )
 
     def _split_to_Xy(self):
         ''' Split data frame into X and y '''
-        X = self.df.drop(self.labels_col).with_columns(
+        X = self.df_train.drop(self.labels_col).with_columns(
             pl.col(self.inview_col).list.len().alias("n_samples")
         )
-        y = self.df[self.labels_col]
+        y = self.df_train[self.labels_col]
         return X, y
 
     def map_to_embeddings(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -173,7 +179,7 @@ class NewsrecDataset(Dataset):
 def create_dataloader(
     path_to_data: str,
     path_to_embedding: str,
-    hparams: dict,
+    hparams,
     batch_size: int = 32,
     unknown_representation: str = "zeros",
     eval_mode: bool = False):
