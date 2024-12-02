@@ -122,10 +122,10 @@ class NRMS(nn.Module):
 
         # Encode the user history
         user_present = self.userencoder(his_input_title)  # u vector
-        news_encoder = self.newsencoder(pred_input_title)  # r vector
+
 
         # Apply news_encoder to all inputs in pred_input_title with TimeDistributed
-        news_present = TimeDistributed(news_encoder, batch_first=False).forward(pred_input_title)
+        news_present = TimeDistributed(self.newsencoder, batch_first=True)(pred_input_title) # r vector
 
         # reshape news_present
         news_present = news_present.view(batch_size, num_titles, -1)
@@ -135,7 +135,7 @@ class NRMS(nn.Module):
         preds = F.softmax(preds, dim=-1)
 
         # Convert to binary labels by taking the argmax
-        preds = torch.argmax(preds, dim=-1)
+        # preds = torch.argmax(preds, dim=-1)
 
         return preds
 

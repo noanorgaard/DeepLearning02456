@@ -27,5 +27,8 @@ def train(model, dataloader, loss_func, optimizer, num_epochs, hparams):
             all_outputs.extend(outputs.detach().cpu().numpy())
 
         # Calculate AUC
-        auc = roc_auc_score(all_labels, all_outputs)
+        auc = 0
+        for i,label_true in enumerate(all_labels):
+            auc += roc_auc_score(label_true, all_outputs[i])
+        auc /= len(all_labels)
         print(f"Epoch [{epoch + 1}/{num_epochs}], AUC: {auc:.4f}")

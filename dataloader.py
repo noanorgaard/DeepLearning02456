@@ -10,10 +10,10 @@ from _behaviors import *
 # TODO join behaviors with history
 
 class Data:
-    def __init__(self, path_to_behaviors, path_to_articles, path_to_history, path_to_embeddings):
-        self.behaviors = pd.read_parquet(path_to_behaviors)
+    def __init__(self, path_to_behaviors, path_to_articles, path_to_history, path_to_embeddings, params):
+        self.behaviors = pl.read_parquet(path_to_behaviors)
         self.articles = pd.read_parquet(path_to_articles)
-        self.history = pd.read_parquet(path_to_history)
+        self.history = pl.read_parquet(path_to_history)
         self.article_embeddings = pd.read_parquet(path_to_embeddings)
         self.article_embeddings_dict = {row["article_id"]: row["contrastive_vector"] for row in self.article_embeddings.to_dict(orient='records')}
 
@@ -22,11 +22,11 @@ class Data:
         COLUMNS_FROM_BEHAVIORS = ["user_id", "impression_id", "impression_time", "article_ids_clicked", "article_ids_inview"]
         COLUMNS = COLUMNS_FROM_HISTORY + COLUMNS_FROM_BEHAVIORS
 
-        HISTORY_SIZE = 30 #TODO make as global variable
-        NPRATIO = 4       #TODO make as gl...
-        SEED = 123        #TODO make as gl...
+        HISTORY_SIZE = params.history_size #TODO make as global variable
+        NPRATIO = params.negative_sampling_ratio       #TODO make as gl...
+        SEED = params.seed        #TODO make as gl...
 
-        self.df_train = self.history.select(COLUMNS_FROM_HISTORY).collect().pipe(
+        self.df_train = self.history.select(COLUMNS_FROM_HISTORY).pipe(
                     truncate_history,
                     column="article_id_fixed",
                     history_size=HISTORY_SIZE,
@@ -34,7 +34,7 @@ class Data:
                     enable_warning=False,
                 ).pipe(
                     slice_join_dataframes,
-                    df2=self.behaviors.select(COLUMNS_FROM_BEHAVIORS).collect(),
+                    df2=self.behaviors.select(COLUMNS_FROM_BEHAVIORS),
                     on="user_id",
                     how="left",
                 ).pipe(
@@ -48,7 +48,7 @@ class Data:
                     shuffle=True,
                     seed=SEED,
                 )
-
+        '''
         title_in_impression = self.behaviors[["user_id", "article_ids_inview", "article_ids_clicked"]]
         title_in_impression_grouped_user_id = title_in_impression.set_index("user_id")
 
@@ -70,7 +70,7 @@ class Data:
         ]
         new_df.loc[:, "article_ids_not_clicked"] = pd.Series(not_clicked, index=new_df.index)
         self.user_click_information = new_df
-
+'''
 
     def downsample(self,
                    npratio  = 4,        # This is K
