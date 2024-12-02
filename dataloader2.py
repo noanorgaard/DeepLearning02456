@@ -22,7 +22,7 @@ class NewsrecDataset(Dataset):
     def __init__(self,
                  path_to_data: str,
                  path_to_embedding: str,
-                 hparams: dict,
+                 hparams: None,
                  unknown_representation: str = "zeros",
                  eval_mode: bool = False):
 
@@ -37,7 +37,7 @@ class NewsrecDataset(Dataset):
             Path.joinpath(path_to_data, "articles.parquet")
         )
         self.article_embeddings = pd.read_parquet(
-            Path.joinpath(path_to_embedding, "contrastive_vectors.parquet")
+            Path.joinpath(path_to_embedding, "contrastive_vector.parquet")
         )
 
         # Create a dictionary for article embeddings
