@@ -9,6 +9,7 @@ import numpy as np
 from nrms import NewsEncoder
 import torch.optim as optim
 from dataloader import create_dataloader
+from dataloader_validation import create_validation_dataloader
 from pathlib import Path
 
 
@@ -22,13 +23,14 @@ class Hyperparameters:
         self.head_dim = 16
         self.attention_hidden_dim = 200
         self.dropout = 0.2
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.negative_sampling_ratio = 4
         self.newsencoder_output_dim = 256
         self.dim_attention_later2 = 256
         self.loss_func = nn.CrossEntropyLoss()
         self.seed = 123
-        self.num_of_rows_in_train = 400
+        self.weight_decay = 1e-4
+        self.num_of_rows_in_train = 1000
 # Usage
 hparams = Hyperparameters()
 
@@ -38,8 +40,7 @@ path_to_embeddings = "tmp/Data/Ekstra_Bladet_contrastive_vector/Ekstra_Bladet_co
 
 dataloader_train = create_dataloader(Path(path_to_data), Path(path_to_embeddings),hparams, 32 )
 
-
-#data = dataloader2.Data(f"{path_to_data}/train/behaviors.parquet", f"{path_to_data}/articles.parquet", f"{path_to_data}/train/history.parquet", f"{path_to_embeddings}/contrastive_vector.parquet", hparams)
+dataloader_validation = create_validation_dataloader(Path(path_to_data), Path(path_to_embeddings),hparams, 32 )
 
 
 # Initialize NRMS model
@@ -47,10 +48,10 @@ news_encoder = NewsEncoder(hparams, units_per_layer=[512, 512, 512])
 nrms_model = NRMS(hparams, news_encoder)
 
 # Define  optimizer
-optimizer = optim.Adam(nrms_model.parameters(), lr=hparams.learning_rate)
+optimizer = optim.Adam(nrms_model.parameters(), lr=hparams.learning_rate, weight_decay=hparams.weight_decay)
 
 # Train the model
-train(nrms_model, dataloader_train, hparams.loss_func, optimizer, num_epochs=1, hparams=hparams)
+train(nrms_model, dataloader_train, dataloader_validation, hparams.loss_func, optimizer, num_epochs=5, hparams=hparams)
 
 
 torch.save(nrms_model, "models/nrms_model_test.pth")
@@ -58,6 +59,8 @@ torch.save(nrms_model, "models/nrms_model_test.pth")
 # Load the model
 nrms_model = torch.load("models/nrms_model_test.pth")
 nrms_model.eval()
+
+
 
 
 
