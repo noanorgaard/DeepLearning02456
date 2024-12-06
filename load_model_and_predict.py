@@ -50,10 +50,8 @@ path_to_txt = Path("submission_folders" / folder_name)
 
 print(len(test_data))
 
-import pandas as pd
-
 # Initialize an empty DataFrame
-results_df = pd.DataFrame(columns=['labels'])
+results = []
 
 for impression_id, row in test_data.iterrows():
     his_article_ids = row["his_article_ids"]
@@ -76,15 +74,14 @@ for impression_id, row in test_data.iterrows():
     labels = labels.tolist()
 
     # Add the labels to the DataFrame
-    results_df.loc[impression_id] = [labels]
+    results.append((impression_id, labels))
 
-    if len(results_df) % 10000 == 0:
-        print(f"Processed {len(results_df)} rows out of {len(test_data)}")
-
+    if len(results) % 10000 == 0:
+        print(f"Processed {len(results)} rows out of {len(test_data)}")
 
 
 with open(path_to_txt, "w") as f:
-    for impr_index, preds in tqdm(zip(results_df.index.tolist(), results_df['labels'].tolist())):
+    for impr_index, preds in tqdm(results):
         preds = "[" + ",".join([str(i) for i in preds]) + "]"
         f.write(" ".join([str(impr_index), preds]) + "\n")
 
