@@ -5,6 +5,8 @@ import numpy as np
 from nrms import NewsEncoder
 from pathlib import Path
 from test_set_dataloader import create_test_set
+import pandas as pd
+from tqdm import tqdm
 
 
 # Define hyperparameters
@@ -32,7 +34,7 @@ news_encoder = NewsEncoder(hparams, units_per_layer=[512, 512, 512])
 nrms_model = NRMS(hparams, news_encoder)
 
 # Load the model
-nrms_model = torch.load("models/nrms_model_test.pth")
+nrms_model = torch.load("models/nrms_model_5_epoch_10k.pth")
 nrms_model.eval()
 
 # Load the data
@@ -44,6 +46,55 @@ test_data, article_embeddings_dict = create_test_set(Path(path_to_data), Path(pa
 folder_name = Path("test")
 path_to_txt = Path("submission_folders" / folder_name)
 
+
+
+print(len(test_data))
+
+import pandas as pd
+
+# Initialize an empty DataFrame
+results_df = pd.DataFrame(columns=['labels'])
+
+for impression_id, row in test_data.iterrows():
+    his_article_ids = row["his_article_ids"]
+    article_ids_inview = row["article_ids_inview"]
+
+    # Create row in tensor_data with index i and columns his_article_ids and article_ids_inview as tensors
+    his_article_embeddings = np.array([article_embeddings_dict[article_id] for article_id in his_article_ids], dtype=np.float32)
+    his_article_tensor = torch.tensor(his_article_embeddings)
+
+    article_ids_inview_embeddings = np.array(
+        [article_embeddings_dict[article_id] for article_id in article_ids_inview], dtype=np.float32)
+    article_ids_inview_tensor = torch.tensor(article_ids_inview_embeddings)
+
+    with torch.no_grad():
+        predictions = nrms_model(his_article_tensor.unsqueeze(0), article_ids_inview_tensor.unsqueeze(0))
+        predictions = predictions.squeeze(0)
+        predictions = predictions.numpy()
+
+    labels = np.argsort(np.argsort(predictions)[::-1]) + 1
+    labels = labels.tolist()
+
+    # Add the labels to the DataFrame
+    results_df.loc[impression_id] = [labels]
+
+    if len(results_df) % 10000 == 0:
+        print(f"Processed {len(results_df)} rows out of {len(test_data)}")
+
+
+
+with open(path_to_txt, "w") as f:
+    for impr_index, preds in tqdm(zip(results_df.index.tolist(), results_df['labels'].tolist())):
+        preds = "[" + ",".join([str(i) for i in preds]) + "]"
+        f.write(" ".join([str(impr_index), preds]) + "\n")
+
+
+
+
+
+
+
+'''
 # Create or overwrite a txt file
 with open(path_to_txt / "predictions.txt", "w") as f:
     # Convert the article_ids_inview and his_article_ids to tensors with the embeddings
@@ -52,11 +103,11 @@ with open(path_to_txt / "predictions.txt", "w") as f:
         article_ids_inview = row["article_ids_inview"]
 
         # Create row in tensor_data with index i and columns his_article_ids and article_ids_inview as tensors
-        his_article_embeddings = np.array([article_embeddings_dict[article_id] for article_id in his_article_ids])
+        his_article_embeddings = np.array([article_embeddings_dict[article_id] for article_id in his_article_ids], dtype=np.float32)
         his_article_tensor = torch.tensor(his_article_embeddings)
 
         article_ids_inview_embeddings = np.array(
-            [article_embeddings_dict[article_id] for article_id in article_ids_inview])
+            [article_embeddings_dict[article_id] for article_id in article_ids_inview], dtype=np.float32)
         article_ids_inview_tensor = torch.tensor(article_ids_inview_embeddings)
 
 
@@ -66,12 +117,20 @@ with open(path_to_txt / "predictions.txt", "w") as f:
             predictions = predictions.numpy()
 
         # Convert predictions into labels where the highest value is 1, second highest is 2 etc.
-        labels = np.argsort(-predictions) + 1
+        labels = np.zeros(len(predictions))
+        count = 0
+        for i in range(len(labels)):
+            count += 1
+            idx = np.argmax(predictions)
+            labels[idx] = int(count)
+            predictions[idx] = -1
+
         labels = labels.tolist()
 
         # Write impression_id and labels to file
-        f.write(f"{impression_id} {' '.join(map(str, labels))}\n")
-
+        labels_str = ','.join(map(str, [int(label) for label in labels]))
+        f.write(f"{impression_id} [{labels_str}]\n")
+'''
 
 
 
