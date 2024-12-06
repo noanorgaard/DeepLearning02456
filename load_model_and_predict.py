@@ -79,8 +79,11 @@ for impression_id, row in test_data.iterrows():
     if len(results) % 10000 == 0:
         print(f"Processed {len(results)} rows out of {len(test_data)}")
 
+results_df = pd.DataFrame(results, columns=["impression_id", "predictions"])
+# Save the DataFrame to a parquet file
+results_df.to_parquet(path_to_txt / "predictions.parquet")
 
-with open(path_to_txt, "w") as f:
+with open(path_to_txt / "predictions.txt", "w") as f:
     for impr_index, preds in tqdm(results):
         preds = "[" + ",".join([str(i) for i in preds]) + "]"
         f.write(" ".join([str(impr_index), preds]) + "\n")
@@ -90,44 +93,6 @@ with open(path_to_txt, "w") as f:
 
 
 
-
-'''
-# Create or overwrite a txt file
-with open(path_to_txt / "predictions.txt", "w") as f:
-    # Convert the article_ids_inview and his_article_ids to tensors with the embeddings
-    for impression_id, row in test_data.iterrows():
-        his_article_ids = row["his_article_ids"]
-        article_ids_inview = row["article_ids_inview"]
-
-        # Create row in tensor_data with index i and columns his_article_ids and article_ids_inview as tensors
-        his_article_embeddings = np.array([article_embeddings_dict[article_id] for article_id in his_article_ids], dtype=np.float32)
-        his_article_tensor = torch.tensor(his_article_embeddings)
-
-        article_ids_inview_embeddings = np.array(
-            [article_embeddings_dict[article_id] for article_id in article_ids_inview], dtype=np.float32)
-        article_ids_inview_tensor = torch.tensor(article_ids_inview_embeddings)
-
-
-        with torch.no_grad():
-            predictions = nrms_model(his_article_tensor.unsqueeze(0), article_ids_inview_tensor.unsqueeze(0))
-            predictions = predictions.squeeze(0)
-            predictions = predictions.numpy()
-
-        # Convert predictions into labels where the highest value is 1, second highest is 2 etc.
-        labels = np.zeros(len(predictions))
-        count = 0
-        for i in range(len(labels)):
-            count += 1
-            idx = np.argmax(predictions)
-            labels[idx] = int(count)
-            predictions[idx] = -1
-
-        labels = labels.tolist()
-
-        # Write impression_id and labels to file
-        labels_str = ','.join(map(str, [int(label) for label in labels]))
-        f.write(f"{impression_id} [{labels_str}]\n")
-'''
 
 
 
