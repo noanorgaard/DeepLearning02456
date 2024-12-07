@@ -5,6 +5,9 @@ import warnings
 import datetime
 import inspect
 
+import sys
+module_path = Path("/Users/jacobostergaard/Desktop/Deep learning/DeepLearning02456/ebnerd-benchmark-main/src")
+sys.path.append(str(module_path))
 
 from ebrec.utils._polars import (
     slice_join_dataframes,

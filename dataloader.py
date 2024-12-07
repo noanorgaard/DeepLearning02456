@@ -1,92 +1,195 @@
 import numpy as np
 import polars as pl
 import pandas as pd
-import pyarrow
-import fastparquet
+from pathlib import Path
 
-# to get truncate_history, create_binary_labels_column, sampling_strategy_wu2019
-from _behaviors import *
+from ebrec.utils._behaviors import (create_binary_labels_column, truncate_history, sampling_strategy_wu2019)
 
 # TODO join behaviors with history
 
-class Data:
-    def __init__(self, path_to_behaviors, path_to_articles, path_to_history, path_to_embeddings):
-        self.behaviors = pd.read_parquet(path_to_behaviors)
-        self.articles = pd.read_parquet(path_to_articles)
-        self.history = pd.read_parquet(path_to_history)
-        self.article_embeddings = pd.read_parquet(path_to_embeddings)
+from torch.utils.data import Dataset, DataLoader
+import torch
+import numpy as np
+import polars as pl
+
+from ebrec.utils._articles_behaviors import map_list_article_id_to_value
+from ebrec.utils._python import (
+    repeat_by_list_values_from_matrix,
+    create_lookup_objects,
+)
+
+class NewsrecDataset(Dataset):
+    def __init__(self,
+                 path_to_data: str,
+                 path_to_embedding: str,
+                 hparams: None,
+                 unknown_representation: str = "zeros",
+                 eval_mode: bool = False):
+
+        # Main data frames and embeddings
+        self.behaviors = pl.scan_parquet(
+            Path.joinpath(path_to_data, "train", "behaviors.parquet")
+        )
+        self.history = pl.scan_parquet(
+            Path.joinpath(path_to_data, "train", "history.parquet")
+        )
+        self.articles = pd.read_parquet(
+            Path.joinpath(path_to_data, "articles.parquet")
+        )
+        self.article_embeddings = pd.read_parquet(
+            Path.joinpath(path_to_embedding, "contrastive_vector.parquet")
+        )
+
+        # Create a dictionary for article embeddings
         self.article_embeddings_dict = {row["article_id"]: row["contrastive_vector"] for row in self.article_embeddings.to_dict(orient='records')}
+
+        # Hyperparameters
+        self.hparams = hparams
 
         # make dataframe for training
         COLUMNS_FROM_HISTORY = ["user_id", "article_id_fixed"]
         COLUMNS_FROM_BEHAVIORS = ["user_id", "impression_id", "impression_time", "article_ids_clicked", "article_ids_inview"]
-        COLUMNS = COLUMNS_FROM_HISTORY + COLUMNS_FROM_BEHAVIORS
 
-        HISTORY_SIZE = 30 #TODO make as global variable
-        NPRATIO = 4       #TODO make as gl...
-        SEED = 123        #TODO make as gl...
+        # Columns we use
+        self.history_col = "his_article_ids"
+        self.inview_col = "article_ids_inview"
+        self.labels_col = "labels"
+        self.user_col = "user_id"
 
-        self.df_train = self.history.select(COLUMNS_FROM_HISTORY).collect().pipe(
+        # To be used for data representation
+        self.unknown_representation = unknown_representation
+        self.eval_mode = eval_mode
+        self.unknown_index = [0]
+
+        # Create lookup objects
+        self.lookup_article_index, self.lookup_article_matrix = create_lookup_objects(
+            self.article_embeddings_dict, unknown_representation=self.unknown_representation
+        )
+
+        self._prepare_history(COLUMNS_FROM_HISTORY)
+        self._prepare_behaviors(COLUMNS_FROM_BEHAVIORS)
+        self._join_dataframes()
+
+        # Load data
+        self.X, self.y = self._split_to_Xy()
+
+    def _prepare_history(self, keep_columns):
+        self.history = (
+            self.history
+            .select(keep_columns)                               # Selecting the columns we want to keep
+            .rename({"article_id_fixed": "his_article_ids"})    # using prefix: his_ to indicate origin: history
+            .collect()
+            .pipe(                                                         # Truncating the history
                     truncate_history,
-                    column="article_id_fixed",
-                    history_size=HISTORY_SIZE,
+                    column="his_article_ids",
+                    history_size=self.hparams.history_size,
                     padding_value=0,
                     enable_warning=False,
-                ).pipe(
-                    slice_join_dataframes,
-                    df2=self.behaviors.select(COLUMNS_FROM_BEHAVIORS).collect(),
-                    on="user_id",
-                    how="left",
-                ).pipe(
-                    sampling_strategy_wu2019,
-                    npratio=NPRATIO,
-                    shuffle=False,
-                    with_replacement=True,
-                    seed=SEED,
-                ).pipe(
-                    create_binary_labels_column,
-                    shuffle=True,
-                    seed=SEED,
                 )
+            )
 
-        title_in_impression = self.behaviors[["user_id", "article_ids_inview", "article_ids_clicked"]]
-        title_in_impression_grouped_user_id = title_in_impression.set_index("user_id")
+    def _prepare_behaviors(self, keep_columns):
+        self.behaviors = (
+            self.behaviors
+            .select(keep_columns) # selecting the columns we want to keep
+            .collect()
+            .with_columns(
+                length=pl.col('article_ids_clicked').map_elements(lambda x: len(x)))  # adding a column with the length of the clicked articles
+            .filter(pl.col('length') == 1)  # we only want users with exactly one click in their impression
+            .pipe(sampling_strategy_wu2019, npratio=self.hparams.negative_sampling_ratio, shuffle=True, clicked_col="article_ids_clicked",
+                inview_col="article_ids_inview", with_replacement=False, seed=self.hparams.seed)   # down-sampling
+            .pipe(create_binary_labels_column, clicked_col="article_ids_clicked",      # creating the binary labels column
+                inview_col="article_ids_inview")
+            .drop("length")
+            )
 
-        # Remove duplicates in index by making new list of article_ids_inview and article_ids_clicked
-        duplicates_bool = title_in_impression_grouped_user_id.index.duplicated(keep="first")
-        new_df = title_in_impression_grouped_user_id[~duplicates_bool]
-        df_duplicates = title_in_impression_grouped_user_id[duplicates_bool]
-        for index, row in df_duplicates.iterrows():
-            new_df.at[index, "article_ids_inview"] = list(
-                set(np.append(new_df.loc[index, "article_ids_inview"], row["article_ids_inview"])))
-            new_df.at[index, "article_ids_clicked"] = list(
-                set(np.append(new_df.loc[index, "article_ids_clicked"], row["article_ids_clicked"])))
+    def _join_dataframes(self):
+        ''''''
+        self.df_train = (
+            self.behaviors
+            .join(self.history, on="user_id", how="left") # joining the history and behaviors dataframes
+            .head(self.hparams.num_of_rows_in_train)
+            .filter(
+                ~pl.col("his_article_ids").list.contains(0)
+                ) # filtering out the rows with 0 in the history
+            )
 
-        new_df["article_ids_inview"].apply(tuple)
-        new_df["article_ids_clicked"].apply(tuple)
-        not_clicked = [
-            set(row["article_ids_inview"]).difference(set(row["article_ids_clicked"]))
-            for index, row in new_df.iterrows()
-        ]
-        new_df.loc[:, "article_ids_not_clicked"] = pd.Series(not_clicked, index=new_df.index)
-        self.user_click_information = new_df
-
-
-    def downsample(self,
-                   npratio  = 4,        # This is K
-                   seed     = 123):
-
-        " Downsample the article inview column to have npratio not clicked per one clicked "
-
-        self.behaviors = self.behaviors.with_columns("article_ids_inview", "article_ids_clicked").pipe(
-            sampling_strategy_wu2019,
-            npratio=npratio,
-            shuffle=False,
-            with_replacement=True,
-            seed=seed,
-        ).pipe(create_binary_labels_column, shuffle=True, seed=seed).with_columns(
-            pl.col("article_label_clicked").list.len().name.suffix("_len")
+    def _split_to_Xy(self):
+        ''' Split data frame into X and y '''
+        X = self.df_train.drop(self.labels_col).with_columns(
+            pl.col(self.inview_col).list.len().alias("n_samples")
         )
+        y = self.df_train[self.labels_col]
+        return X, y
+
+    def map_to_embeddings(self, df: pl.DataFrame) -> pl.DataFrame:
+        ''' Map the article ids in history_col and inview_col to their embeddings '''
+        return df.pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.history_col,
+            mapping=self.lookup_article_index,
+            fill_nulls=self.unknown_index,
+            drop_nulls=False,
+        ).pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.inview_col,
+            mapping=self.lookup_article_index,
+            fill_nulls=self.unknown_index,
+            drop_nulls=False,
+        )
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        Xi = self.X[idx].pipe(self.map_to_embeddings)
+        yi = self.y[idx]
+
+        if self.eval_mode:
+            repeats = np.array(Xi["n_samples"])
+            yi = np.array(yi.explode().to_list()).reshape(-1,1)
+            his_input_embeddings = repeat_by_list_values_from_matrix(
+                Xi[self.history_col].to_list(),
+                matrix=self.lookup_article_matrix,
+                repeats=repeats,
+            )
+            pred_input_embeddings = self.lookup_article_matrix[
+                Xi[self.inview_col].explode().to_list()
+            ]
+        else:
+            yi = np.array(yi.to_list())
+            his_input_embeddings = self.lookup_article_matrix[
+                Xi[self.history_col].to_list()
+            ]
+            pred_input_embeddings = self.lookup_article_matrix[
+                Xi[self.inview_col].to_list()
+            ]
+            #pred_input_embeddings = pred_input_embeddings.reshape(-1,1,self.embedding_size)
+
+        # Make into torch tensors
+        his_input_embeddings = torch.tensor(his_input_embeddings, dtype=torch.float32)
+        pred_input_embeddings = torch.tensor(pred_input_embeddings, dtype=torch.float32)
+        yi = torch.tensor(yi,dtype=torch.float32)
+
+        # Reshape
+        his_input_embeddings = his_input_embeddings.view(-1,self.hparams.title_size)
+        pred_input_embeddings = pred_input_embeddings.view(-1,self.hparams.title_size)
+
+        return his_input_embeddings, pred_input_embeddings, yi
+
+
+# Create a PyTorch DataLoader
+def create_dataloader(
+    path_to_data: str,
+    path_to_embedding: str,
+    hparams,
+    batch_size: int = 32,
+    unknown_representation: str = "zeros",
+    eval_mode: bool = False):
+
+    dataset = NewsrecDataset(path_to_data, path_to_embedding, hparams, unknown_representation, eval_mode)
+
+    return DataLoader(dataset, batch_size=batch_size, shuffle=not eval_mode)
 
 
 
