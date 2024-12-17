@@ -80,7 +80,7 @@ class NewsEncoder(nn.Module):
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
-        attn_output, _ = self.multihead_attention(x, x, x)
+        # attn_output, _ = self.multihead_attention(x, x, x) # Multi-head attention
         return self.model(x)
 
 
@@ -139,16 +139,4 @@ class NRMS(nn.Module):
 
         return preds
 
-    def score(self, his_input_title, pred_input_title_one):
-        # Encode the user history
-        user_present = self.userencoder(his_input_title)  # u vector
 
-        # Encode the single predicted title
-        pred_title_one_reshape = pred_input_title_one.view(-1, self.hparams.title_size)
-        news_present_one = self.newsencoder(pred_title_one_reshape)  # r vector for one article
-
-        # Compute dot product and apply sigmoid
-        pred_one = torch.matmul(news_present_one, user_present.unsqueeze(-1)).squeeze(-1)
-        pred_one = torch.sigmoid(pred_one)
-
-        return pred_one

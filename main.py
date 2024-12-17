@@ -54,11 +54,11 @@ optimizer = optim.Adam(nrms_model.parameters(), lr=hparams.learning_rate, weight
 train(nrms_model, dataloader_train, dataloader_validation, hparams.loss_func, optimizer, num_epochs=5, hparams=hparams)
 
 
-torch.save(nrms_model, "models/nrms_model_test.pth")
+#torch.save(nrms_model, "models/nrms_model_test.pth")
 
 # Load the model
-nrms_model = torch.load("models/nrms_model_test.pth")
-nrms_model.eval()
+#nrms_model = torch.load("models/nrms_model_test.pth")
+#nrms_model.eval()
 
 
 
